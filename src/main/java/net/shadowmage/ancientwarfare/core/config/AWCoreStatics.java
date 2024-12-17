@@ -53,17 +53,34 @@ public class AWCoreStatics extends ModConfiguration {
 	public static int eliteConquerResistance = 2;
 	public static int bossConquerResistance = 5;
 	public static int batteringRamBaseDamage = 5;
+	public static int nemesisRepChange = 1;
+
+	public static float invisibilityFollowRangePenalty = 0.1f;
+	public static float sneakingFollowRangePenalty = 0.5f;
+	public static float obscuredFollowRangePenalty = 0.75f;
 	public static float blockProtectionMulti = 100.0f;
+
+	public static boolean combatNPCsRequireFood = true;
 	public static boolean npcDialogue = true;
 	public static boolean allowStealing = true;
 	public static boolean chestProtection = true;
 	public static boolean blockProtection = true;
 	public static boolean floatingIslands = false;
+	public static boolean demonsImmuneToFire = true;
+	public static boolean nemesisFactions = true;
+	public static boolean showSmallNemesisRepChanges = true;
+	public static boolean showLargeNemesisRepChanges = true;
+//	public static boolean spawnersRequireLineOfSight = false;
+
 	public static HashMap modDistanceFromSpawnMap = new HashMap<String, Integer>();
 	public static HashMap mobReplacementMap = new HashMap<String, String>();
+	public static HashMap nemesisFactionsMap = new HashMap<String, String>();
 	public static ArrayList<ResourceLocation> medicItems = new ArrayList<>();
-	private static String[] modDistanceFromSpawnArray;
+    public static float meleeReachModifier = 0.0F;
+
+    private static String[] modDistanceFromSpawnArray;
 	private static String[] mobReplacementArray;
+	private static String[] nemesisFactionsArray;
 	private static String[] medicItemsPlaceholder;
 	private static String[] defaultMobReplacementArray = {
 			"primitivemobs:bewitched_tome > twilightforest:death_tome",
@@ -83,6 +100,7 @@ public class AWCoreStatics extends ModConfiguration {
 			"grimoireofgaia:goblin > twilightforest:kobold",
 			"grimoireofgaia:goblin_feral > twilightforest:redcap",
 			"grimoireofgaia:vampire > dungeonmobs:dmvampire",
+			"grimoireofgaia:harpy_wizard > twilightforest:skeleton_druid",
 			"dungeonmobs:dmvampire > grimoireofgaia:vampire",
 			"grimoireofgaia:sharko > oe:drowned",
 			"grimoireofgaia:gelatinous_slime > miencraft:slime",
@@ -111,6 +129,20 @@ public class AWCoreStatics extends ModConfiguration {
 	};
 	private static String[] defaultMedicItems = {
 			"minecraft:apple"
+	};
+	private static String[] defaultNemesisFactionsArray = {
+			"good < evil",
+			"evil < good",
+			"pirate < empire",
+			"empire < buffloka",
+			"norska < icelord",
+			"icelord < norska",
+			"wizardly < witchbane",
+			"witchbane < wizardly",
+			"zimba < kong",
+			"kong < zimba",
+			"gnome < giant",
+			"giant < gnome"
 	};
 
 	public AWCoreStatics(String modid) {
@@ -153,13 +185,27 @@ public class AWCoreStatics extends ModConfiguration {
 		 */
 		npcDialogue = config.getBoolean("npc_dialogue", tweakOptions, true, "Toggles whether NPCs will chat with the player when right-clicked.");
 
+		nemesisFactions = config.getBoolean("nemesis_factions", tweakOptions, true, "Enables/disables the Nemesis Factions mechanic. This causes the player to gain rep when killing an NPC, in all factions that hate that NPC's faction.");
+		showSmallNemesisRepChanges = config.getBoolean("show_small_nemesis_rep_changes", tweakOptions, false, "Toggles whether players receive messages in chat telling them whenever they gain rep from the Nemesis Faction mechanic.");
+		showLargeNemesisRepChanges = config.getBoolean("show_large_nemesis_rep_changes", tweakOptions, true, "Toggles whether players receive messages in chat telling them that they have gained favor with a previously hostile faction via the Nemesis Faction mechanic.");
+
 		allowStealing = config.getBoolean("allow_stealing", tweakOptions, true, "Toggles whether players can steal from NPC loot chests when no one is looking.\n"+"No effect if loot_chest_protection is disabled.");
 		chestProtection = config.getBoolean("loot_chest_protection", tweakOptions, true, "Toggles whether players need to steal or claim structures to open NPC loot chests.\n"+"If this is disabled, players can open any loot chests freely.");
+
+//		spawnersRequireLineOfSight = config.getBoolean("spawners_require_line_of_sight", tweakOptions, true, "Toggles whether advanced spawners require line of sight to a player to spawn things.\n"+"In the original AW2, this is false.");
+
+		demonsImmuneToFire = config.getBoolean("demons_immune_to_fire", tweakOptions, true, "Toggles whether NPCs from the demon faction are immune to fire and lava damage.");
+		combatNPCsRequireFood = config.getBoolean("combat_NPCs_require_food", tweakOptions, true, "Toggles whether player-owned combat NPCs require food the same way that workers do. If this is set to false, combat NPCs will NEVER need to eat.");
 
 		blockProtection = config.getBoolean("block_protection", tweakOptions, true, "Toggles whether (some) blocks in faction-owned structures are harder to mine through.\n"+"If true, (some) blocks on faction-owned land take <block_protection_multiplier> as long to mine.");
 		blockProtectionMulti = config.getFloat("block_protection_multiplier", tweakOptions, 100.0f, 0.0f, 1000000.0f , "Controls how much longer it takes to mine blocks on faction-protected land.");
 
-		floatingIslands = config.getBoolean("floating_islands", tweakOptions, false, "Toggles whether island structures in the ocean float on top of the water, or fill in the space beneath them with solid blocks.\n"+"\ttrue = islands float above water\n"+"\tfalse = islands replace all water beneath them with solid blocks (original AW2 style)");
+		invisibilityFollowRangePenalty = config.getFloat("invisibility_follow_range_penalty", tweakOptions, 0.1f, 0.0f, 1.0f , "NPCs follow range is multiplied by this when they are targeting invisible entities.\n"+"For example, the default value of 0.1 means that you cannot be targeted by NPCs while invisible until you are 90% of the way to them (very close).\n"+"If you set this to 1, then NPCs can target invisible entities just as well as non-invisible ones.");
+		sneakingFollowRangePenalty = config.getFloat("sneaking_follow_range_penalty", tweakOptions, 0.5f, 0.0f, 1.0f , "NPCs follow range is multiplied by this when they are targeting sneaking entities.\n"+"For example, the default value of 0.5 means that you cannot be targeted by NPCs while sneaking until you are 50% of the way to them.\n"+"If you set this to 1, then NPCs can target sneaking entities just as well as non-sneaking ones.");
+		obscuredFollowRangePenalty = config.getFloat("obscured_follow_range_penalty", tweakOptions, 0.75f, 0.0f, 1.0f , "NPCs follow range is multiplied by this when they are targeting entities obscured behind blocks.\n"+"For example, the default value of 0.75 means that you cannot be targeted by NPCs while they do until you are 75% of the way to them.\n"+"If you set this to 1, then NPCs can target obscured entities just as well as ones they can directly see.");
+		meleeReachModifier = config.getFloat("melee_reach_modifier", tweakOptions, 0.0f, -10.0f, +10.0f , "Add this number to the melee reach of NPCs. Put a negative number here to lower their reach.\n"+"Default reach when this is 0 is about 2.5 blocks.");
+
+//		floatingIslands = config.getBoolean("floating_islands", tweakOptions, false, "Toggles whether island structures in the ocean float on top of the water, or fill in the space beneath them with solid blocks.\n"+"\ttrue = islands float above water\n"+"\tfalse = islands replace all water beneath them with solid blocks (original AW2 style)");
 
 		batteringRamBaseDamage = config.getInt("battering_ram_base_damage", tweakOptions, 5, 0, 1000000 , "Controls the amount of damage battering rams deal (before their material bonus is applied.)");
 
@@ -170,6 +216,8 @@ public class AWCoreStatics extends ModConfiguration {
 		bossConquerResistance = config.getInt("boss_conquer_resistance", tweakOptions, 5, 0, 1000000 , "Controls how many points boss enemies are worth when calculating whether players can claim a structure.");
 
 		glowDuration = config.getInt("highlight_duration", tweakOptions, 6000, 0, 1000000 , "Controls how long enemies and spawners glow when they are preventing you from claiming a structure or opening a chest, in ticks.\n"+"There are 20 ticks per second, so the default 6000 = 5 minutes.");
+
+		nemesisRepChange = config.getInt("nemesis_rep_change", tweakOptions, 1, -1000, 1000 , "Controls how much rep you gain/lose in a nemesis faction when you kill a member of their nemesis faction.\n"+"Does nothing if the nemesis_factions option is false.");
 
 		modDistanceFromSpawnArray = config.getStringList("mod_distance_from_spawn", tweakOptions, defaultModDistanceFromSpawnArray, "Set a minimum distance from spawn for AW2 structures containing specific mods.\nFor example, the default prevents AW2 structures containing ElectroBlob's Wizardry mobs from generating within 500 blocks of spawn, and IceandFire structures within 1000 blocks of spawn.");
 		// Populate modDistanceFromSpawnMap based on the array
@@ -197,7 +245,7 @@ public class AWCoreStatics extends ModConfiguration {
 				continue;
 			}
 		}
-		mobReplacementArray = config.getStringList("mod_replacement", tweakOptions, defaultMobReplacementArray, "When an AW2 spawner fails to spawn an entity (for example, if the entity is from a mod that is not installed), attempt to spawn the replacement instead.\nIf that fails too, and the mob is hostile, it will spawn a zombie.\nNote that the replacement is not going to happen if the original mob spawns successfully.");
+		mobReplacementArray = config.getStringList("mob_replacement", tweakOptions, defaultMobReplacementArray, "When an AW2 spawner fails to spawn an entity (for example, if the entity is from a mod that is not installed), attempt to spawn the replacement instead.\nIf that fails too, and the mob is hostile, it will spawn a zombie.\nNote that the replacement is not going to happen if the original mob spawns successfully.");
 		// Populate mobReplacementMap based on the array
 		for (int i = 0; i < mobReplacementArray.length; i++) {
 			String line = mobReplacementArray[i];
@@ -213,6 +261,26 @@ public class AWCoreStatics extends ModConfiguration {
 			}
 			else {
 				System.out.println("WARNING: syntax error in config. Line missing greater-than separator: "+line);
+				continue;
+			}
+		}
+
+		nemesisFactionsArray = config.getStringList("nemesis_factions_list", tweakOptions, defaultNemesisFactionsArray, "Defines faction Nemesis relations. Whenever you kill a member of the faction before the '<',\n"+"you gain favor with the faction after the '<'. Amount of rep gained is defined by nemesis_rep_change.");
+		// Populate mobReplacementMap based on the array
+		for (int i = 0; i < nemesisFactionsArray.length; i++) {
+			String line = nemesisFactionsArray[i];
+			if(line.contains("<")){
+				String[] keyValue = line.split("<");
+				if(keyValue.length != 2) {
+					System.out.println("WARNING: syntax error in config. Line has too many/few less-than signs: "+line);
+					continue;
+				}
+				String dyingFaction = keyValue[0].trim(); // The faction being killed
+				String beneficiaryFaction = keyValue[1].trim(); // The faction happy about it
+				nemesisFactionsMap.put(dyingFaction, beneficiaryFaction);
+			}
+			else {
+				System.out.println("WARNING: syntax error in config. Line missing less-than separator: "+line);
 				continue;
 			}
 		}

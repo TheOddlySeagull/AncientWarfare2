@@ -17,6 +17,8 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.text.TextComponentTranslation;
 import net.minecraft.world.World;
 import net.minecraftforge.event.entity.EntityJoinWorldEvent;
+import net.minecraftforge.event.entity.living.LivingAttackEvent;
+import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.fml.common.eventhandler.EventPriority;
@@ -143,11 +145,11 @@ public class EventHandler {
 			AWGameData.INSTANCE.getPerWorldData(world, StructureMap.class).getStructureAt(world, pos).ifPresent(structure -> {
 				Optional<TileProtectionFlag> tile = WorldTools.getTile(world, structure.getProtectionFlagPos(), TileProtectionFlag.class);
 				if(AWCoreStatics.allowStealing) {
-					System.out.println("Allow stealing attempt!");
+//					System.out.println("Allow stealing attempt!");
 					// Skip the flag protection. Always let the player loot chests if no one is around to see it
 					for (NpcFaction factionNpc : world.getEntitiesWithinAABB(NpcFaction.class, structure.getBB().getAABB())) {
-						// If none of the entities can see the player, simply let them open the chest.
-						if (player.canEntityBeSeen(factionNpc)) {
+						// If one of the entities can see the player, prevent them from opening the chest.
+						if (factionNpc.canTarget(player) && player.canEntityBeSeen(factionNpc)) {
 							evt.setCanceled(true);
 							evt.setCancellationResult(EnumActionResult.FAIL);
 							factionNpc.addPotionEffect(new PotionEffect(MobEffects.GLOWING, AWCoreStatics.glowDuration));
@@ -160,7 +162,7 @@ public class EventHandler {
 					}
 				}
 				else { // Old code for full loot chest protection. Player must clear enemies and claim the flag to open chests.
-					System.out.println("Old-school chest protection!");
+//					System.out.println("Old-school chest protection!");
 					if (tile.isPresent() && tile.get().shouldProtectAgainst(player)) {
 						evt.setCanceled(true);
 						evt.setCancellationResult(EnumActionResult.FAIL);
@@ -223,4 +225,17 @@ public class EventHandler {
 
 		return WorldTools.getTile(world, pos).map(te -> te.getTileData().getBoolean(GENERATED_INVENTORY_TAG) || te instanceof ISpecialLootContainer).orElse(false);
 	}
+
+	@SubscribeEvent
+	public void onLivingAttack(LivingAttackEvent evt)
+	{
+		// When demons are going to take damage, if it is fire/lava/heat damage, ignore it.
+		if(AWCoreStatics.demonsImmuneToFire && evt.getSource().isFireDamage()) {
+			// Only active if the demons_immune_to_fire option is enabled in the config.
+			if (evt.getEntity() instanceof NpcFaction && ((NpcFaction) evt.getEntity()).getFaction().equals("demon")) {
+				evt.setCanceled(true);
+			}
+		}
+	}
+
 }

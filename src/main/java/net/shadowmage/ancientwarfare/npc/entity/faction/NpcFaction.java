@@ -5,6 +5,7 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.EnumCreatureAttribute;
+import net.minecraft.entity.SharedMonsterAttributes;
 import net.minecraft.entity.item.EntityBoat;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.MobEffects;
@@ -25,6 +26,9 @@ import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.SoundEvent;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.text.TextComponentString;
+import net.minecraft.util.text.TextComponentTranslation;
+import net.minecraft.util.text.TextFormatting;
 import net.minecraft.util.text.translation.I18n;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.Constants;
@@ -34,7 +38,7 @@ import net.shadowmage.ancientwarfare.core.util.NBTHelper;
 import net.shadowmage.ancientwarfare.npc.ai.AIHelper;
 import net.shadowmage.ancientwarfare.npc.ai.faction.NpcAIFactionFleeSun;
 import net.shadowmage.ancientwarfare.npc.ai.faction.NpcAIFactionRestrictSun;
-import net.shadowmage.ancientwarfare.npc.dialogue.NPCDialogue;
+import net.shadowmage.ancientwarfare.npc.registry.NPCDialogue;
 import net.shadowmage.ancientwarfare.npc.config.AWNPCStatics;
 import net.shadowmage.ancientwarfare.npc.entity.NpcBase;
 import net.shadowmage.ancientwarfare.npc.entity.NpcPlayerOwned;
@@ -53,11 +57,7 @@ import net.shadowmage.ancientwarfare.structure.util.SpawnerHelper;
 import org.apache.commons.lang3.Range;
 
 import javax.annotation.Nullable;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 import static net.minecraftforge.common.MinecraftForge.EVENT_BUS;
 import static net.minecraftforge.fml.common.eventhandler.Event.Result.ALLOW;
@@ -240,7 +240,7 @@ public abstract class NpcFaction extends NpcBase {
 	public int getMaxFallHeight() {
 		int i = super.getMaxFallHeight();
 		if (i > 4) {
-			i += world.getDifficulty().getDifficultyId() * getMaxHealth() / 5;
+			i += (int) (world.getDifficulty().getId() * getMaxHealth() / 5);
 		}
 		if (i >= getHealth()) {
 			return (int) getHealth();
@@ -349,6 +349,27 @@ public abstract class NpcFaction extends NpcBase {
 
 	@Override
 	public boolean canTarget(Entity e) {
+		// Stealth code, takes into account invisibility, line of sight, sneaking, etc
+		// If invis, range multiplier is 0.1x
+		// If LOS is blocked, range multiplier is 0.75x
+		// If sneaking, range multiplier is 0.5x
+		// (These values are configurable.)
+		// These can all stack if they are enabled. Base follow range uses the attribute.
+		double adjustedTargettingRange = this.getEntityAttribute(SharedMonsterAttributes.FOLLOW_RANGE).getAttributeValue();
+		if(e.isInvisible()) {
+			adjustedTargettingRange *= AWCoreStatics.invisibilityFollowRangePenalty;
+		}
+		if(e.isSneaking()) {
+			adjustedTargettingRange *= AWCoreStatics.sneakingFollowRangePenalty;
+		}
+		if(!this.getEntitySenses().canSee(e)) {
+			adjustedTargettingRange *= AWCoreStatics.obscuredFollowRangePenalty;
+		}
+		if(this.getDistance(e) > adjustedTargettingRange) {
+			// Cannot detect the target entity.
+			return false;
+		}
+
 		if (e instanceof NpcFaction) {
 			return !((NpcFaction) e).getFaction().equals(getFaction());
 		}
@@ -372,11 +393,13 @@ public abstract class NpcFaction extends NpcBase {
 	@Override
 	public void onDeath(DamageSource damageSource) {
 		super.onDeath(damageSource);
+		EntityPlayer player;
+		String playerName;
+
 		if (damageSource.getTrueSource() instanceof EntityPlayer || damageSource.getTrueSource() instanceof NpcPlayerOwned) {
-			String playerName = damageSource.getTrueSource() instanceof EntityPlayer ? damageSource.getTrueSource().getName() :
+			playerName = damageSource.getTrueSource() instanceof EntityPlayer ? damageSource.getTrueSource().getName() :
 					((NpcBase) damageSource.getTrueSource()).getOwner().getName();
 			FactionTracker.INSTANCE.adjustStandingFor(world, playerName, getFaction(), FactionRegistry.getFaction(getFaction()).getStandingSettings().getStandingChange(StandingChanges.KILL));
-
 			setDeathRevengePlayer(playerName);
 			world.getEntitiesWithinAABB(NpcFaction.class, new AxisAlignedBB(getPosition()).grow(REVENGE_SET_RANGE))
 					.forEach(factionNpc -> {
@@ -384,6 +407,55 @@ public abstract class NpcFaction extends NpcBase {
 							factionNpc.setDeathRevengePlayer(playerName);
 						}
 					});
+			// If the Nemesis factions mechanic is enabled:
+			if(AWCoreStatics.nemesisFactions) {
+				try {
+					player = damageSource.getTrueSource() instanceof EntityPlayer ? (EntityPlayer)damageSource.getTrueSource() :
+							world.getPlayerEntityByUUID(((NpcBase) damageSource.getTrueSource()).getOwner().getUUID());
+				}
+				catch (ClassCastException e) {
+					System.out.println("AW2t: Nemesis system could not find player who killed NPC.");
+					return;
+				}
+				if(AWCoreStatics.nemesisFactionsMap.containsKey(getFaction())){
+					String nemesisFaction = ((String)AWCoreStatics.nemesisFactionsMap.get(getFaction())).toLowerCase();
+					// getFaction returns a unique empty faction if the faction name is not valid
+					if(FactionRegistry.getFaction(nemesisFaction).equals(FactionRegistry.EMPTY_FACTION)) {
+						System.out.println("AW2t: Invalid faction found in nemesis list! "+nemesisFaction);
+					}
+					else {
+						// Both faction names were valid, do nemesis standings change
+						String prettyNemesisFactionName = new TextComponentTranslation("gui.ancientwarfarenpc.faction_name."+nemesisFaction).getFormattedText();
+						if(AWCoreStatics.DEBUG) System.out.println("AW2t: Nemesis system adjusted standings for "+nemesisFaction);
+						if(AWCoreStatics.showLargeNemesisRepChanges) {
+							int currentStanding = FactionTracker.INSTANCE.getStandingFor(world, playerName, nemesisFaction);
+							// If the faction is hostile to the player, but will become neutral/friendly due to this nemesis rep, play the big message
+							if(currentStanding < 0 && currentStanding + AWCoreStatics.nemesisRepChange >= 0) {
+								String message = "The "+prettyNemesisFactionName+" are pleased with the devastation you have wrought upon their enemies. They will welcome you with open arms.";
+								player.sendMessage(new TextComponentString(TextFormatting.DARK_AQUA+message));
+							}
+						}
+						if(AWCoreStatics.showSmallNemesisRepChanges) {
+							String message;
+							if(AWCoreStatics.nemesisRepChange > 0) {
+								message = "+" + AWCoreStatics.nemesisRepChange + " rep with the " + prettyNemesisFactionName;
+							}
+							else {
+								message = AWCoreStatics.nemesisRepChange + " rep with the " + prettyNemesisFactionName;
+							}
+							player.sendMessage(new TextComponentString(TextFormatting.DARK_AQUA + message));
+						}
+						FactionTracker.INSTANCE.adjustStandingFor(world, playerName, nemesisFaction, AWCoreStatics.nemesisRepChange);
+					}
+				}
+				else {
+					System.out.println("AW2t: Nemesis system did not find faction "+getFaction()+" in list.");
+					if(AWCoreStatics.DEBUG) System.out.println("AW2t: Full list: "+AWCoreStatics.nemesisFactionsMap.toString());
+				}
+			}
+			else {
+				if(AWCoreStatics.DEBUG) System.out.println("AW2t: Nemesis system disabled in config; skipping");
+			}
 		}
 	}
 

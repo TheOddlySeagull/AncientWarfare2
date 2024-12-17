@@ -51,7 +51,8 @@
         "experience_drop": 20,
         "equipment": {
           "mainhand": "minecraft:bow"
-        }
+        },
+        "loot_table": "ancientwarfare:entities/archer"
       },
       "archer.elite": {
         "attributes": {
@@ -63,7 +64,7 @@
         "equipment": {
           "mainhand": "minecraft:bow"
         },
-        "loot_table": "ancientwarfare:entities/archer"
+        "loot_table": "ancientwarfare:entities/archer_elite"
       },
       "cavalry": {
         "attributes": {
@@ -762,7 +763,7 @@
             "generic.maxHealth": 50
           },
           "equipment": {
-            "mainhand": "minecraft:ender_pearl"
+            "mainhand": "minecraft:enchanted_book"
           },
           "experience_drop": 50
         },

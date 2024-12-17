@@ -12,6 +12,7 @@ import net.minecraft.nbt.NBTTagList;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.Constants;
 import net.minecraftforge.fml.common.ObfuscationReflectionHelper;
@@ -145,7 +146,7 @@ public class SpawnerSettings {
 	}
 
 	private void updateRedstoneModeToggle() {
-		prevRedstoneState = world.isBlockIndirectlyGettingPowered(pos) > 0 || world.getStrongPower(pos) > 0;
+		prevRedstoneState = world.getRedstonePowerFromNeighbors(pos) > 0 || world.getStrongPower(pos) > 0;
 		if (respondToRedstone && !redstoneMode && !prevRedstoneState) {
 			//noop
 			return;
@@ -154,7 +155,7 @@ public class SpawnerSettings {
 	}
 
 	private void updateRedstoneModePulse() {
-		boolean powered = world.isBlockIndirectlyGettingPowered(pos) > 0 || world.getStrongPower(pos) > 0;
+		boolean powered = world.getRedstonePowerFromNeighbors(pos) > 0 || world.getStrongPower(pos) > 0;
 		if (!prevRedstoneState && powered) {
 			spawnEntities();
 		}
@@ -261,7 +262,15 @@ public class SpawnerSettings {
 
 		for (EntityPlayer player : world.playerEntities) {
 			if (player.getEntityBoundingBox().intersects(new AxisAlignedBB(pos, pos.add(1, 1, 1)).grow(playerRange, playerRange, playerRange))) {
+//				if(AWCoreStatics.spawnersRequireLineOfSight) {
+//					// LOS check to player
+//					if(player.world.rayTraceBlocks(new Vec3d(player.posX, player.posY + (double)player.getEyeHeight(), player.posZ), new Vec3d(pos.getX(), pos.getY()+1, pos.getZ()), false, true, false) == null) {
+//						players.add(player);
+//					}
+//				}
+//				else {
 				players.add(player);
+//				}
 			}
 		}
 		return players;

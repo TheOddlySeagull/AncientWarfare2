@@ -3,6 +3,7 @@ package net.shadowmage.ancientwarfare.npc.entity;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.INpc;
+import net.minecraft.entity.SharedMonsterAttributes;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.EntityEquipmentSlot;
 import net.minecraft.item.ItemStack;
@@ -15,6 +16,7 @@ import net.minecraft.util.SoundEvent;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import net.minecraftforge.items.IItemHandler;
+import net.shadowmage.ancientwarfare.core.config.AWCoreStatics;
 import net.shadowmage.ancientwarfare.core.util.WorldTools;
 import net.shadowmage.ancientwarfare.npc.AncientWarfareNPC;
 import net.shadowmage.ancientwarfare.npc.ai.AIHelper;
@@ -28,6 +30,7 @@ import net.shadowmage.ancientwarfare.npc.orders.UpkeepOrder;
 import net.shadowmage.ancientwarfare.npc.registry.NpcDefault;
 import net.shadowmage.ancientwarfare.npc.registry.NpcDefaultsRegistry;
 import net.shadowmage.ancientwarfare.npc.tile.TileTownHall;
+import static net.shadowmage.ancientwarfare.npc.config.AWNPCStatics.npcKeepEquipment;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -202,6 +205,26 @@ public abstract class NpcPlayerOwned extends NpcBase implements IKeepFood, INpc 
 
 	@Override
 	public boolean canTarget(Entity e) {
+		// Stealth code, takes into account invisibility, line of sight, sneaking, etc
+		// If invis, range multiplier is 0.1x
+		// If LOS is blocked, range multiplier is 0.75x
+		// If sneaking, range multiplier is 0.5x
+		// (These values are configurable.)
+		// These can all stack if they are enabled. Base follow range uses the attribute.
+		double adjustedTargettingRange = this.getEntityAttribute(SharedMonsterAttributes.FOLLOW_RANGE).getAttributeValue();
+		if(e.isInvisible()) {
+			adjustedTargettingRange *= AWCoreStatics.invisibilityFollowRangePenalty;
+		}
+		if(e.isSneaking()) {
+			adjustedTargettingRange *= AWCoreStatics.sneakingFollowRangePenalty;
+		}
+		if(!this.getEntitySenses().canSee(e)) {
+			adjustedTargettingRange *= AWCoreStatics.obscuredFollowRangePenalty;
+		}
+		if(this.getDistance(e) > adjustedTargettingRange) {
+			// Cannot detect the target entity.
+			return false;
+		}
 		// don't let npcs target their own teams npcs/players
 		return !getOwner().isOwnerOrSameTeamOrFriend(e) && e instanceof EntityLivingBase;
 	}
@@ -253,12 +276,14 @@ public abstract class NpcPlayerOwned extends NpcBase implements IKeepFood, INpc 
 
 	@Override
 	protected void dropEquipment(boolean wasRecentlyHit, int lootingModifier) {
-		for (EntityEquipmentSlot slot : EntityEquipmentSlot.values()) {
-			ItemStack itemstack = this.getItemStackFromSlot(slot);
-			if (!itemstack.isEmpty()) {
-				this.entityDropItem(itemstack, 0.0F);
+		if (!npcKeepEquipment) {
+			for (EntityEquipmentSlot slot : EntityEquipmentSlot.values()) {
+				ItemStack itemstack = this.getItemStackFromSlot(slot);
+				if (!itemstack.isEmpty()) {
+					this.entityDropItem(itemstack, 0.0F);
+				}
+				setItemStackToSlot(slot, ItemStack.EMPTY);			
 			}
-			setItemStackToSlot(slot, ItemStack.EMPTY);
 		}
 		if (!AWNPCStatics.persistOrdersOnDeath) {
 			if (!ordersStack.isEmpty()) {
